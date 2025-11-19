@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Optional, List
 from uuid import UUID, uuid4
 from datetime import datetime
-from pydantic import BaseModel, Field, EmailStr
-
-
+from pydantic import BaseModel, Field  
+   
 class TheatreBase(BaseModel):
     name: str = Field(
         ...,
@@ -17,40 +16,16 @@ class TheatreBase(BaseModel):
         description="Theatre address.",
         json_schema_extra={"example": "234 W 42nd St, New York, NY 10036"},
     )
-    city: str = Field(
+
+    cinema_id: UUID = Field(
         ...,
-        description="City where the theatre is located.",
-        json_schema_extra={"example": "New York"},
+        description="ID of the cinema this theatre belongs to.",
+        json_schema_extra={"example": "99999999-9999-4999-8999-999999999999"},
     )
-    state: str = Field(
+    screenCount: int = Field(
         ...,
-        description="State or province where the theatre is located.",
-        json_schema_extra={"example": "NY"},
-    )
-    postal_code: str = Field(
-        ...,
-        description="Postal code of the theatre.",
-        json_schema_extra={"example": "10036"},
-    )
-    country: str = Field(
-        ...,
-        description="Country where the theatre is located.",
-        json_schema_extra={"example": "USA"},
-    )
-    phone: Optional[str] = Field(
-        None,
-        description="Theatre contact phone number.",
-        json_schema_extra={"example": "+1-212-555-0123"},
-    )
-    email: Optional[EmailStr] = Field(
-        None,
-        description="Theatre contact email.",
-        json_schema_extra={"example": "info@amctimesquare.com"},
-    )
-    capacity: Optional[int] = Field(
-        None,
-        description="Total seating capacity of the theatre.",
-        json_schema_extra={"example": 500},
+        description="Number of screens in the theatre.",
+        json_schema_extra={"example": 10},
     )
 
     model_config = {
@@ -59,13 +34,8 @@ class TheatreBase(BaseModel):
                 {
                     "name": "AMC Times Square",
                     "address": "234 W 42nd St",
-                    "city": "New York",
-                    "state": "NY",
-                    "postal_code": "10036",
-                    "country": "USA",
-                    "phone": "+1-212-555-0123",
-                    "email": "info@amctimesquare.com",
-                    "capacity": 500,
+                    "cinema_id": "99999999-9999-4999-8999-999999999999",
+                    "screenCount": 10,
                 }
             ]
         }
@@ -80,13 +50,8 @@ class TheatreCreate(TheatreBase):
                 {
                     "name": "Regal Union Square",
                     "address": "850 Broadway",
-                    "city": "New York",
-                    "state": "NY",
-                    "postal_code": "10003",
-                    "country": "USA",
-                    "phone": "+1-212-555-0456",
-                    "email": "info@regalunionsquare.com",
-                    "capacity": 300,
+                    "cinema_id": "88888888-8888-4888-8888-888888888888",
+                    "screenCount": 8,
                 }
             ]
         }
@@ -97,20 +62,16 @@ class TheatreUpdate(BaseModel):
     """Partial update for a Theatre; supply only fields to change."""
     name: Optional[str] = Field(None, description="Theatre name")
     address: Optional[str] = Field(None, description="Theatre address")
-    city: Optional[str] = Field(None, description="City")
-    state: Optional[str] = Field(None, description="State or province")
-    postal_code: Optional[str] = Field(None, description="Postal code")
-    country: Optional[str] = Field(None, description="Country")
-    phone: Optional[str] = Field(None, description="Contact phone number")
-    email: Optional[EmailStr] = Field(None, description="Contact email")
-    capacity: Optional[int] = Field(None, description="Total seating capacity")
+    cinema_id: Optional[UUID] = Field(None, description="ID of the cinema this theatre belongs to")
+    screenCount: Optional[int] = Field(None, description="Number of screens in the theatre")
+
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {"name": "AMC Times Square Updated"},
-                {"phone": "+1-212-555-0789"},
-                {"capacity": 600},
+                {"address": "235 W 42nd St"},
+                {"screenCount": 12},    
             ]
         }
     }
@@ -118,7 +79,7 @@ class TheatreUpdate(BaseModel):
 
 class TheatreRead(TheatreBase):
     """Server representation returned to clients."""
-    id: UUID = Field(
+    theatre_id: UUID = Field(
         default_factory=uuid4,
         description="Server-generated Theatre ID.",
         json_schema_extra={"example": "99999999-9999-4999-8999-999999999999"},
@@ -140,14 +101,9 @@ class TheatreRead(TheatreBase):
                 {
                     "id": "99999999-9999-4999-8999-999999999999",
                     "name": "AMC Times Square",
-                    "address": "234 W 42nd St",
-                    "city": "New York",
-                    "state": "NY",
-                    "postal_code": "10036",
-                    "country": "USA",
-                    "phone": "+1-212-555-0123",
-                    "email": "info@amctimesquare.com",
-                    "capacity": 500,
+                    "address": "234 W 42nd St, New York, NY 10036",
+                    "cinema_id": "99999999-9999-4999-8999-999999999999",
+                    "screenCount": 10,
                     "created_at": "2025-01-15T10:20:30Z",
                     "updated_at": "2025-01-16T12:00:00Z",
                 }

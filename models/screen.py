@@ -17,25 +17,15 @@ class ScreenBase(BaseModel):
         description="Screen number within the theatre.",
         json_schema_extra={"example": 1},
     )
-    name: Optional[str] = Field(
-        None,
-        description="Screen name or identifier.",
-        json_schema_extra={"example": "Screen 1 - IMAX"},
-    )
-    capacity: int = Field(
+    num_rows: int = Field(
         ...,
-        description="Number of seats in this screen.",
-        json_schema_extra={"example": 150},
+        description="Number of seating rows in the screen.",
+        json_schema_extra={"example": 15},
     )
-    screen_type: Optional[str] = Field(
-        None,
-        description="Type of screen (IMAX, 3D, Standard, etc.).",
-        json_schema_extra={"example": "IMAX"},
-    )
-    is_active: bool = Field(
-        True,
-        description="Whether the screen is currently active.",
-        json_schema_extra={"example": True},
+    num_cols: int = Field(
+        ...,       
+        description="Number of seating columns in the screen.",
+        json_schema_extra={"example": 20},
     )
 
     model_config = {
@@ -44,10 +34,8 @@ class ScreenBase(BaseModel):
                 {
                     "theatre_id": "99999999-9999-4999-8999-999999999999",
                     "screen_number": 1,
-                    "name": "Screen 1 - IMAX",
-                    "capacity": 150,
-                    "screen_type": "IMAX",
-                    "is_active": True,
+                    "num_rows": 15,
+                    "num_cols": 20,
                 }
             ]
         }
@@ -62,10 +50,8 @@ class ScreenCreate(ScreenBase):
                 {
                     "theatre_id": "99999999-9999-4999-8999-999999999999",
                     "screen_number": 2,
-                    "name": "Screen 2 - Standard",
-                    "capacity": 200,
-                    "screen_type": "Standard",
-                    "is_active": True,
+                    "num_rows": 10, 
+                    "num_cols": 25,
                 }
             ]
         }
@@ -74,18 +60,16 @@ class ScreenCreate(ScreenBase):
 
 class ScreenUpdate(BaseModel):
     """Partial update for a Screen; supply only fields to change."""
+    theatre_id: Optional[UUID] = Field(None, description="ID of the theatre this screen belongs to")    
     screen_number: Optional[int] = Field(None, description="Screen number")
-    name: Optional[str] = Field(None, description="Screen name or identifier")
-    capacity: Optional[int] = Field(None, description="Number of seats")
-    screen_type: Optional[str] = Field(None, description="Type of screen")
-    is_active: Optional[bool] = Field(None, description="Whether the screen is active")
-
+    num_rows: Optional[int] = Field(None, description="Number of seating rows")
+    num_cols: Optional[int] = Field(None, description="Number of seating columns")
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {"name": "Screen 1 - Updated IMAX"},
-                {"capacity": 175},
-                {"is_active": False},
+                {"screen_number": 3},
+                {"num_rows": 12},
+                {"num_cols": 30},
             ]
         }
     }
@@ -93,7 +77,7 @@ class ScreenUpdate(BaseModel):
 
 class ScreenRead(ScreenBase):
     """Server representation returned to clients."""
-    id: UUID = Field(
+    screen_id: UUID = Field(
         default_factory=uuid4,
         description="Server-generated Screen ID.",
         json_schema_extra={"example": "88888888-8888-4888-8888-888888888888"},
@@ -113,13 +97,11 @@ class ScreenRead(ScreenBase):
         "json_schema_extra": {
             "examples": [
                 {
-                    "id": "88888888-8888-4888-8888-888888888888",
+                    "screen_id": "88888888-8888-4888-8888-888888888888",
                     "theatre_id": "99999999-9999-4999-8999-999999999999",
                     "screen_number": 1,
-                    "name": "Screen 1 - IMAX",
-                    "capacity": 150,
-                    "screen_type": "IMAX",
-                    "is_active": True,
+                    "num_rows": 15,
+                    "num_cols": 20,
                     "created_at": "2025-01-15T10:20:30Z",
                     "updated_at": "2025-01-16T12:00:00Z",
                 }

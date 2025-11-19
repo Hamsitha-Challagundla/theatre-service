@@ -5,7 +5,7 @@ import socket
 from datetime import datetime
 
 from typing import Dict, List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import hashlib, json
 from json import JSONEncoder
@@ -18,8 +18,7 @@ from fastapi.responses import Response
 
 from models.theatre import TheatreCreate, TheatreRead, TheatreUpdate
 from models.screen import ScreenCreate, ScreenRead, ScreenUpdate
-from models.movie import MovieCreate, MovieRead, MovieUpdate
-from models.showtime import ShowtimeCreate, ShowtimeRead, ShowtimeUpdate
+from models.cinema import CinemaCreate, CinemaRead, CinemaUpdate
 from models.health import Health
 from models.theatreDataService import TheatreDataService
 
@@ -30,12 +29,11 @@ port = int(os.environ.get("FASTAPIPORT", 8001))
 # -----------------------------------------------------------------------------
 theatres: Dict[UUID, TheatreRead] = {}
 screens: Dict[UUID, ScreenRead] = {}
-movies: Dict[UUID, MovieRead] = {}
-showtimes: Dict[UUID, ShowtimeRead] = {}
+cinemas: Dict[UUID, CinemaRead] = {}
 
 app = FastAPI(
     title="Nebula Booking Theatre Service API",
-    description="FastAPI app using Pydantic v2 models for Theatre, Screen, Movie, and Showtime management",
+    description="FastAPI app using Pydantic v2 models for Theatre, Screen, and Cinema management",
     version="0.1.0",
 )
 
@@ -99,39 +97,80 @@ def favicon():
 
 @app.post("/theatres", response_model=TheatreRead, status_code=201)
 def create_theatre(theatre: TheatreCreate, response: Response):
+    """Create a new theatre using the Theatre models."""
     new_theatre = TheatreRead(**theatre.model_dump())
-    theatres[new_theatre.id] = new_theatre
+    # store by the model's theatre_id
+    theatres[new_theatre.theatre_id] = new_theatre
     response.headers["ETag"] = _calc_etag(new_theatre)
     return new_theatre
+
+def _int_to_uuid(value: int) -> UUID:
+    """Convert an integer ID to a UUID by padding to 32 hex characters."""
+    if value is None:
+        return uuid4()
+    # Convert int to hex string, pad to 32 chars, then create UUID
+    hex_str = f"{value:032x}"
+    return UUID(hex_str)
 
 @app.get("/theatres", response_model=List[TheatreRead])
 def list_theatres(
     name: Optional[str] = Query(None, description="Filter by theatre name"),
-    city: Optional[str] = Query(None, description="Filter by city"),
-    state: Optional[str] = Query(None, description="Filter by state"),
-    country: Optional[str] = Query(None, description="Filter by country"),
+    cinema_id: Optional[UUID] = Query(None, description="Filter by cinema_id"),
 ):
-    """List all theatres with optional filtering."""
-    items = TheatreDataService().get_all_theatres()
-    ans=[]
-    for item in items:
-        obj = {}
-        obj['id'] = "99999999-9999-4999-8999-999999999999"
-        obj['name'] = item['name']
-        obj['address'] = item['address']
-        obj['city'] = ""
-        obj['state'] = ""
-        obj['postal_code'] = ""
-        obj['country'] = ""
-        obj['phone'] = ""
-        obj['email'] = "a@b.com"
-        obj['capacity'] = 60
-        obj['created_at'] = item['created_at'].isoformat() + "Z"
-        obj['updated_at'] = item['updated_at'].isoformat() + "Z"
-
-        ans.append(obj)
+    """List theatres from the database using TheatreDataService. Supports filtering by name and cinema_id."""
+    # Get theatres from database via TheatreDataService
+    db_theatres = TheatreDataService().get_all_theatres()
     
-    return ans
+    # Convert database results to TheatreRead objects
+    items: List[TheatreRead] = []
+    for db_item in db_theatres:
+        # Database returns INT UNSIGNED for IDs, but model expects UUID
+        # Database uses snake_case (screen_count), model uses camelCase (screenCount)
+        theatre_id_val = db_item.get('theatre_id')
+        cinema_id_val = db_item.get('cinema_id')
+        
+        # Handle created_at and updated_at - they might be datetime objects or strings
+        created_at_val = db_item.get('created_at')
+        if isinstance(created_at_val, datetime):
+            created_at = created_at_val
+        elif created_at_val:
+            # Try parsing as ISO format
+            if isinstance(created_at_val, str):
+                created_at = datetime.fromisoformat(created_at_val.replace('Z', '+00:00'))
+            else:
+                created_at = datetime.utcnow()
+        else:
+            created_at = datetime.utcnow()
+            
+        updated_at_val = db_item.get('updated_at')
+        if isinstance(updated_at_val, datetime):
+            updated_at = updated_at_val
+        elif updated_at_val:
+            if isinstance(updated_at_val, str):
+                updated_at = datetime.fromisoformat(updated_at_val.replace('Z', '+00:00'))
+            else:
+                updated_at = datetime.utcnow()
+        else:
+            updated_at = datetime.utcnow()
+        
+        theatre = TheatreRead(
+            theatre_id=_int_to_uuid(theatre_id_val) if isinstance(theatre_id_val, int) else (UUID(str(theatre_id_val)) if theatre_id_val else uuid4()),
+            name=db_item.get('name', ''),
+            address=db_item.get('address', ''),
+            cinema_id=_int_to_uuid(cinema_id_val) if isinstance(cinema_id_val, int) else (UUID(str(cinema_id_val)) if cinema_id_val else uuid4()),
+            screenCount=db_item.get('screen_count', db_item.get('screenCount', 0)),
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+        items.append(theatre)
+    
+    # Apply filters
+    if name:
+        items = [t for t in items if name.lower() in t.name.lower()]
+    if cinema_id:
+        items = [t for t in items if t.cinema_id == cinema_id]
+
+    return items
 
 @app.get("/theatres/{theatre_id}", response_model=TheatreRead)
 def get_theatre(
@@ -152,18 +191,36 @@ def get_theatre(
     response.headers["ETag"] = etag
     return item
 
-@app.get("/theatres/{theatre_id}", response_model=TheatreRead)
-def get_theatre(theatre_id: UUID):
-    """Get a specific theatre by ID."""
-    item = theatres.get(theatre_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Theatre not found")
-    return item
-
 @app.patch("/theatres/{theatre_id}", response_model=TheatreRead)
-def update_theatre(theatre_id: UUID, update: TheatreUpdate):
+def update_theatre(
+    theatre_id: UUID,
+    update: TheatreUpdate,
+    response: Response,
+    if_match: Optional[str] = Header(None)  # maps to "If-Match"
+):
     """Update a theatre (partial update)."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    existing = theatres.get(theatre_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Theatre not found")
+
+    current_etag = _calc_etag(existing)
+
+    # Enforce optimistic concurrency: require If-Match and it must match
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="Precondition Required: missing If-Match")
+    if if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
+
+    # Merge updates onto existing model
+    updates = update.model_dump(exclude_none=True)
+    updated = existing.model_copy(update=updates)
+    # Update the updated_at timestamp
+    updated.updated_at = datetime.utcnow()
+    theatres[theatre_id] = updated
+
+    new_etag = _calc_etag(updated)
+    response.headers["ETag"] = new_etag
+    return updated
 
 @app.put("/theatres/{theatre_id}", response_model=TheatreRead)
 def replace_theatre(
@@ -185,7 +242,9 @@ def replace_theatre(
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
 
     # Replace entire resource; keep the same id; update timestamps if your model has them
-    replacement = TheatreRead(id=theatre_id, **theatre.model_dump())
+    replacement = TheatreRead(theatre_id=theatre_id, **theatre.model_dump())
+    # Update the updated_at timestamp
+    replacement.updated_at = datetime.utcnow()
     theatres[theatre_id] = replacement
 
     new_etag = _calc_etag(replacement)
@@ -216,79 +275,244 @@ def delete_theatre(
 # -----------------------------------------------------------------------------
 
 @app.post("/screens", response_model=ScreenRead, status_code=201)
-def create_screen(screen: ScreenCreate):
-    """Create a new screen."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+def create_screen(screen: ScreenCreate, response: Response):
+    """Create a new screen and store it in the in-memory store."""
+    new_screen = ScreenRead(**screen.model_dump())
+    screens[new_screen.screen_id] = new_screen
+    response.headers["ETag"] = _calc_etag(new_screen)
+    return new_screen
 
 @app.get("/screens", response_model=List[ScreenRead])
 def list_screens(
     theatre_id: Optional[UUID] = Query(None, description="Filter by theatre ID"),
     screen_number: Optional[int] = Query(None, description="Filter by screen number"),
-    screen_type: Optional[str] = Query(None, description="Filter by screen type"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
 ):
-    """List all screens with optional filtering."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    """List all screens with optional filtering by theatre_id and screen_number."""
+    items: List[ScreenRead] = list(screens.values())
+    if theatre_id:
+        items = [s for s in items if s.theatre_id == theatre_id]
+    if screen_number is not None:
+        items = [s for s in items if s.screen_number == screen_number]
+    return items
 
 @app.get("/screens/{screen_id}", response_model=ScreenRead)
-def get_screen(screen_id: UUID):
+def get_screen(
+    screen_id: UUID,
+    response: Response,
+    if_none_match: Optional[str] = Header(None)  # maps to "If-None-Match"
+):
     """Get a specific screen by ID."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    item = screens.get(screen_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    etag = _calc_etag(item)
+    # If client's cached version matches, say "Not Modified"
+    if if_none_match == etag:
+        # Best practice: still echo current ETag in 304
+        return Response(status_code=304, headers={"ETag": etag})
+
+    response.headers["ETag"] = etag
+    return item
 
 @app.patch("/screens/{screen_id}", response_model=ScreenRead)
-def update_screen(screen_id: UUID, update: ScreenUpdate):
+def update_screen(
+    screen_id: UUID,
+    update: ScreenUpdate,
+    response: Response,
+    if_match: Optional[str] = Header(None)  # maps to "If-Match"
+):
     """Update a screen (partial update)."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    existing = screens.get(screen_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    current_etag = _calc_etag(existing)
+
+    # Enforce optimistic concurrency: require If-Match and it must match
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="Precondition Required: missing If-Match")
+    if if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
+
+    # Merge updates onto existing model
+    updates = update.model_dump(exclude_none=True)
+    updated = existing.model_copy(update=updates)
+    # Update the updated_at timestamp
+    updated.updated_at = datetime.utcnow()
+    screens[screen_id] = updated
+
+    new_etag = _calc_etag(updated)
+    response.headers["ETag"] = new_etag
+    return updated
 
 @app.put("/screens/{screen_id}", response_model=ScreenRead)
-def replace_screen(screen_id: UUID, screen: ScreenCreate):
+def replace_screen(
+    screen_id: UUID,
+    screen: ScreenCreate,
+    response: Response,
+    if_match: Optional[str] = Header(None)  # maps to "If-Match"
+):
     """Replace entire screen resource (PUT - complete replacement)."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    existing = screens.get(screen_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    current_etag = _calc_etag(existing)
+
+    # Enforce optimistic concurrency: require If-Match and it must match
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="Precondition Required: missing If-Match")
+    if if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
+
+    # Replace entire resource; keep the same id; update timestamps if your model has them
+    replacement = ScreenRead(screen_id=screen_id, **screen.model_dump())
+    # Update the updated_at timestamp
+    replacement.updated_at = datetime.utcnow()
+    screens[screen_id] = replacement
+
+    new_etag = _calc_etag(replacement)
+    response.headers["ETag"] = new_etag
+    return replacement
 
 @app.delete("/screens/{screen_id}")
-def delete_screen(screen_id: UUID):
-    """Delete a screen resource."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
-
-# -----------------------------------------------------------------------------
-# Showtime endpoints
-# -----------------------------------------------------------------------------
-
-@app.post("/showtimes", response_model=ShowtimeRead, status_code=201)
-def create_showtime(showtime: ShowtimeCreate):
-    """Create a new showtime."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
-
-@app.get("/showtimes", response_model=List[ShowtimeRead])
-def list_showtimes(
-    theatre_id: Optional[UUID] = Query(None, description="Filter by theatre ID"),
-    screen_id: Optional[UUID] = Query(None, description="Filter by screen ID"),
-    movie_id: Optional[UUID] = Query(None, description="Filter by movie ID"),
-    show_date: Optional[str] = Query(None, description="Filter by show date (YYYY-MM-DD)"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+def delete_screen(
+    screen_id: UUID,
+    if_match: Optional[str] = Header(None)
 ):
-    """List all showtimes with optional filtering."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    """Delete a screen resource."""
+    existing = screens.get(screen_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Screen not found")
 
-@app.get("/showtimes/{showtime_id}", response_model=ShowtimeRead)
-def get_showtime(showtime_id: UUID):
-    """Get a specific showtime by ID."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    current_etag = _calc_etag(existing)
+    # If you want protection: only delete if client proves it has the latest
+    if if_match is not None and if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
 
-@app.patch("/showtimes/{showtime_id}", response_model=ShowtimeRead)
-def update_showtime(showtime_id: UUID, update: ShowtimeUpdate):
-    """Update a showtime (partial update)."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+    del screens[screen_id]
+    return {"status": "deleted", "id": str(screen_id)}
 
-@app.put("/showtimes/{showtime_id}", response_model=ShowtimeRead)
-def replace_showtime(showtime_id: UUID, showtime: ShowtimeCreate):
-    """Replace entire showtime resource (PUT - complete replacement)."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+# -----------------------------------------------------------------------------
+# Cinema endpoints
+# -----------------------------------------------------------------------------
 
-@app.delete("/showtimes/{showtime_id}")
-def delete_showtime(showtime_id: UUID):
-    """Delete a showtime resource."""
-    return HTTPException(status_code=501, detail="NOT IMPLEMENTED")
+@app.post("/cinemas", response_model=CinemaRead, status_code=201)
+def create_cinema(cinema: CinemaCreate, response: Response):
+    """Create a new cinema using the Cinema models."""
+    new_cinema = CinemaRead(**cinema.model_dump())
+    # store by the model's cinema_id
+    cinemas[new_cinema.cinema_id] = new_cinema
+    response.headers["ETag"] = _calc_etag(new_cinema)
+    return new_cinema
+
+@app.get("/cinemas", response_model=List[CinemaRead])
+def list_cinemas(
+    name: Optional[str] = Query(None, description="Filter by cinema name"),
+):
+    """List cinemas from the in-memory store. Supports filtering by name."""
+    items: List[CinemaRead] = list(cinemas.values())
+    if name:
+        items = [c for c in items if name.lower() in c.name.lower()]
+
+    return items
+
+@app.get("/cinemas/{cinema_id}", response_model=CinemaRead)
+def get_cinema(
+    cinema_id: UUID,
+    response: Response,
+    if_none_match: Optional[str] = Header(None)  # maps to "If-None-Match"
+):
+    item = cinemas.get(cinema_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Cinema not found")
+
+    etag = _calc_etag(item)
+    # If client's cached version matches, say "Not Modified"
+    if if_none_match == etag:
+        # Best practice: still echo current ETag in 304
+        return Response(status_code=304, headers={"ETag": etag})
+
+    response.headers["ETag"] = etag
+    return item
+
+@app.patch("/cinemas/{cinema_id}", response_model=CinemaRead)
+def update_cinema(
+    cinema_id: UUID,
+    update: CinemaUpdate,
+    response: Response,
+    if_match: Optional[str] = Header(None)  # maps to "If-Match"
+):
+    """Update a cinema (partial update)."""
+    existing = cinemas.get(cinema_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Cinema not found")
+
+    current_etag = _calc_etag(existing)
+
+    # Enforce optimistic concurrency: require If-Match and it must match
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="Precondition Required: missing If-Match")
+    if if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
+
+    # Merge updates onto existing model
+    updates = update.model_dump(exclude_none=True)
+    updated = existing.model_copy(update=updates)
+    # Update the updated_at timestamp
+    updated.updated_at = datetime.utcnow()
+    cinemas[cinema_id] = updated
+
+    new_etag = _calc_etag(updated)
+    response.headers["ETag"] = new_etag
+    return updated
+
+@app.put("/cinemas/{cinema_id}", response_model=CinemaRead)
+def replace_cinema(
+    cinema_id: UUID,
+    cinema: CinemaCreate,
+    response: Response,
+    if_match: Optional[str] = Header(None)  # maps to "If-Match"
+):
+    existing = cinemas.get(cinema_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Cinema not found")
+
+    current_etag = _calc_etag(existing)
+
+    # Enforce optimistic concurrency: require If-Match and it must match
+    if if_match is None:
+        raise HTTPException(status_code=428, detail="Precondition Required: missing If-Match")
+    if if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
+
+    # Replace entire resource; keep the same id; update timestamps if your model has them
+    replacement = CinemaRead(cinema_id=cinema_id, **cinema.model_dump())
+    # Update the updated_at timestamp
+    replacement.updated_at = datetime.utcnow()
+    cinemas[cinema_id] = replacement
+
+    new_etag = _calc_etag(replacement)
+    response.headers["ETag"] = new_etag
+    return replacement
+
+@app.delete("/cinemas/{cinema_id}")
+def delete_cinema(
+    cinema_id: UUID,
+    if_match: Optional[str] = Header(None)
+):
+    existing = cinemas.get(cinema_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Cinema not found")
+
+    current_etag = _calc_etag(existing)
+    # If you want protection: only delete if client proves it has the latest
+    if if_match is not None and if_match != current_etag:
+        raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
+
+    del cinemas[cinema_id]
+    return {"status": "deleted", "id": str(cinema_id)}
 
 # -----------------------------------------------------------------------------
 # Root
