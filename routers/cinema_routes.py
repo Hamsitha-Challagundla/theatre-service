@@ -4,29 +4,32 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Depends
 from fastapi.responses import Response
 
 from schemas.cinema import CinemaCreate, CinemaRead, CinemaUpdate
 from services.cinemaDataService import CinemaDataService
 from utils.etag import calc_etag
 from utils.converters import dict_to_cinema_read
+from database import get_db
+from sqlalchemy.orm import Session
 
 
 router = APIRouter(prefix="/cinemas", tags=["cinemas"])
 
 
 @router.post("", response_model=CinemaRead, status_code=201)
-def create_cinema(cinema: CinemaCreate, response: Response):
+def create_cinema(cinema: CinemaCreate, response: Response, db: Session = Depends(get_db)):
     """Create a new cinema in the database."""
     db_service = CinemaDataService()
     
     cinema_id = db_service.create_cinema(
+        db=db,
         name=cinema.name,
         created_by=1  # Placeholder - would come from auth
     )
     
-    db_item = db_service.get_cinema_by_id(cinema_id)
+    db_item = db_service.get_cinema_by_id(cinema_id) # why is this get cinema call needed while creating cinema?
     if not db_item:
         raise HTTPException(status_code=500, detail="Failed to create cinema")
     
@@ -38,10 +41,11 @@ def create_cinema(cinema: CinemaCreate, response: Response):
 @router.get("", response_model=List[CinemaRead])
 def list_cinemas(
     name: Optional[str] = Query(None, description="Filter by cinema name"),
+    db: Session = Depends(get_db),
 ):
     """List cinemas from the database. Supports filtering by name."""
     db_service = CinemaDataService()
-    db_cinemas = db_service.get_all_cinemas()
+    db_cinemas = db_service.get_all_cinemas(db)
     
     items: List[CinemaRead] = [
         CinemaRead(**dict_to_cinema_read(db_item))
@@ -58,13 +62,14 @@ def list_cinemas(
 def get_cinema(
     cinema_id: UUID,
     response: Response,
-    if_none_match: Optional[str] = Header(None)
+    if_none_match: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
 ):
     """Get a specific cinema from the database by ID."""
     db_service = CinemaDataService()
     cinema_id_int = int(str(cinema_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_cinema_by_id(cinema_id_int)
+    db_item = db_service.get_cinema_by_id(db, cinema_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Cinema not found")
     
@@ -83,13 +88,14 @@ def update_cinema(
     cinema_id: UUID,
     update: CinemaUpdate,
     response: Response,
-    if_match: Optional[str] = Header(None)
+    if_match: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
 ):
     """Update a cinema (partial update) in the database."""
     db_service = CinemaDataService()
     cinema_id_int = int(str(cinema_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_cinema_by_id(cinema_id_int)
+    db_item = db_service.get_cinema_by_id(db, cinema_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Cinema not found")
     
@@ -103,6 +109,7 @@ def update_cinema(
     
     updates = update.model_dump(exclude_none=True)
     success = db_service.update_cinema(
+        db=db,
         cinema_id=cinema_id_int,
         name=updates.get('name')
     )
@@ -123,13 +130,14 @@ def replace_cinema(
     cinema_id: UUID,
     cinema: CinemaCreate,
     response: Response,
-    if_match: Optional[str] = Header(None)
+    if_match: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
 ):
     """Replace entire cinema resource (PUT) in the database."""
     db_service = CinemaDataService()
     cinema_id_int = int(str(cinema_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_cinema_by_id(cinema_id_int)
+    db_item = db_service.get_cinema_by_id(db, cinema_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Cinema not found")
     
@@ -142,6 +150,7 @@ def replace_cinema(
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
     
     success = db_service.update_cinema(
+        db=db,
         cinema_id=cinema_id_int,
         name=cinema.name
     )
@@ -160,13 +169,14 @@ def replace_cinema(
 @router.delete("/{cinema_id}")
 def delete_cinema(
     cinema_id: UUID,
-    if_match: Optional[str] = Header(None)
+    if_match: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
 ):
     """Soft delete a cinema from the database."""
     db_service = CinemaDataService()
     cinema_id_int = int(str(cinema_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_cinema_by_id(cinema_id_int)
+    db_item = db_service.get_cinema_by_id(db, cinema_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Cinema not found")
     
@@ -176,7 +186,7 @@ def delete_cinema(
     if if_match is not None and if_match != current_etag:
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
     
-    success = db_service.delete_cinema(cinema_id_int)
+    success = db_service.delete_cinema(db, cinema_id_int)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete cinema")
     

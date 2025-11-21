@@ -2,7 +2,7 @@
 Database setup for Theatre Service with SQLAlchemy
 """
 
-from sqlalchemy import create_engine, Column, DateTime, Boolean
+from sqlalchemy import create_engine, Column, DateTime, Boolean, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from datetime import datetime
@@ -56,7 +56,7 @@ class BaseModel:
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_deleted = Column(Boolean, nullable=False, default=False)
     deleted_at = Column(DateTime, nullable=True)
-    created_by = Column(db.Column.Integer, nullable=True)
+    created_by = Column(Integer, nullable=True)
 
     def soft_delete(self):
         """Soft delete the record"""

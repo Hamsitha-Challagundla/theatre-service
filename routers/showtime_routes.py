@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from fastapi.responses import Response
 
 from schemas.showtime import (
@@ -16,6 +16,8 @@ from schemas.showtime import (
 )
 from services.showtimeDataService import ShowtimeDataService
 from services.screenDataService import ScreenDataService
+from database import get_db
+from sqlalchemy.orm import Session
 from utils.etag import calc_etag
 from utils.converters import dict_to_showtime_read, db_to_uuid
 
@@ -24,18 +26,19 @@ router = APIRouter(prefix="/showtimes", tags=["showtimes"])
 
 
 @router.post("", response_model=ShowtimeRead, status_code=201)
-def create_showtime(showtime: ShowtimeCreate, response: Response):
+def create_showtime(showtime: ShowtimeCreate, response: Response, db: Session = Depends(get_db)):
     """Create a new showtime in the database."""
     db_service = ShowtimeDataService()
     screen_service = ScreenDataService()
     
     # Verify screen exists (convert UUID to int)
     screen_id_int = int(str(showtime.screen_id).replace('-', '')[:8], 16) % (10**9)
-    screen = screen_service.get_screen_by_id(screen_id_int)
+    screen = screen_service.get_screen_by_id(db, screen_id_int)
     if not screen:
         raise HTTPException(status_code=404, detail=f"Screen {showtime.screen_id} not found")
     
     showtime_id = db_service.create_showtime(
+        db=db,
         screen_id=screen_id_int,
         movie_id=showtime.movie_id,
         start_time=showtime.start_time,
@@ -57,6 +60,7 @@ def list_showtimes(
     screen_id: Optional[UUID] = Query(None, description="Filter by screen ID"),
     movie_id: Optional[int] = Query(None, description="Filter by movie ID"),
     start_time_after: Optional[datetime] = Query(None, description="Filter showtimes starting after this time"),
+    db: Session = Depends(get_db),
 ):
     """List all showtimes from the database with optional filtering."""
     db_service = ShowtimeDataService()
@@ -64,11 +68,11 @@ def list_showtimes(
     # Get all showtimes or filter by specific criteria
     if screen_id:
         screen_id_int = int(str(screen_id).replace('-', '')[:8], 16) % (10**9)
-        db_showtimes = db_service.get_showtimes_by_screen(screen_id_int)
+        db_showtimes = db_service.get_showtimes_by_screen(db, screen_id_int)
     elif movie_id is not None:
-        db_showtimes = db_service.get_showtimes_by_movie(movie_id)
+        db_showtimes = db_service.get_showtimes_by_movie(db, movie_id)
     else:
-        db_showtimes = db_service.get_all_showtimes()
+        db_showtimes = db_service.get_all_showtimes(db)
     
     items: List[ShowtimeRead] = [
         ShowtimeRead(**dict_to_showtime_read(db_item))
@@ -86,13 +90,14 @@ def list_showtimes(
 def get_showtime(
     showtime_id: UUID,
     response: Response,
-    if_none_match: Optional[str] = Query(None)
+    if_none_match: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
     """Get a specific showtime from the database by ID."""
     db_service = ShowtimeDataService()
     showtime_id_int = int(str(showtime_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_showtime_by_id(showtime_id_int)
+    db_item = db_service.get_showtime_by_id(db, showtime_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Showtime not found")
     
@@ -111,13 +116,14 @@ def update_showtime(
     showtime_id: UUID,
     update: ShowtimeUpdate,
     response: Response,
-    if_match: Optional[str] = Query(None)
+    if_match: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
     """Update a showtime (partial update) in the database."""
     db_service = ShowtimeDataService()
     showtime_id_int = int(str(showtime_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_showtime_by_id(showtime_id_int)
+    db_item = db_service.get_showtime_by_id(db, showtime_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Showtime not found")
     
@@ -131,6 +137,7 @@ def update_showtime(
     
     updates = update.model_dump(exclude_none=True)
     success = db_service.update_showtime(
+        db=db,
         showtime_id=showtime_id_int,
         movie_id=updates.get('movie_id'),
         start_time=updates.get('start_time'),
@@ -153,13 +160,14 @@ def replace_showtime(
     showtime_id: UUID,
     showtime: ShowtimeCreate,
     response: Response,
-    if_match: Optional[str] = Query(None)
+    if_match: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
     """Replace entire showtime resource (PUT) in the database."""
     db_service = ShowtimeDataService()
     showtime_id_int = int(str(showtime_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_showtime_by_id(showtime_id_int)
+    db_item = db_service.get_showtime_by_id(db, showtime_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Showtime not found")
     
@@ -172,6 +180,7 @@ def replace_showtime(
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
     
     success = db_service.update_showtime(
+        db=db,
         showtime_id=showtime_id_int,
         movie_id=showtime.movie_id,
         start_time=showtime.start_time,
@@ -192,13 +201,14 @@ def replace_showtime(
 @router.delete("/{showtime_id}")
 def delete_showtime(
     showtime_id: UUID,
-    if_match: Optional[str] = Query(None)
+    if_match: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
     """Soft delete a showtime from the database."""
     db_service = ShowtimeDataService()
     showtime_id_int = int(str(showtime_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_showtime_by_id(showtime_id_int)
+    db_item = db_service.get_showtime_by_id(db, showtime_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Showtime not found")
     
@@ -208,7 +218,7 @@ def delete_showtime(
     if if_match is not None and if_match != current_etag:
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
     
-    success = db_service.delete_showtime(showtime_id_int)
+    success = db_service.delete_showtime(db, showtime_id_int)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete showtime")
     
@@ -216,13 +226,13 @@ def delete_showtime(
 
 
 @router.get("/{showtime_id}/availability", response_model=SeatAvailabilityResponse)
-def get_seat_availability(showtime_id: UUID):
+def get_seat_availability(showtime_id: UUID, db: Session = Depends(get_db)):
     """Get seat availability information for a showtime from the database."""
     db_service = ShowtimeDataService()
     screen_service = ScreenDataService()
     showtime_id_int = int(str(showtime_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_showtime_by_id(showtime_id_int)
+    db_item = db_service.get_showtime_by_id(db, showtime_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Showtime not found")
     
@@ -230,7 +240,7 @@ def get_seat_availability(showtime_id: UUID):
     
     # Get screen information
     screen_id_int = int(str(showtime.screen_id).replace('-', '')[:8], 16) % (10**9)
-    screen_data = screen_service.get_screen_by_id(screen_id_int)
+    screen_data = screen_service.get_screen_by_id(db, screen_id_int)
     if not screen_data:
         raise HTTPException(status_code=404, detail="Screen not found for this showtime")
     
@@ -250,7 +260,8 @@ def get_seat_availability(showtime_id: UUID):
 def update_seat_count(
     showtime_id: UUID,
     seat_update: SeatUpdateRequest,
-    response: Response
+    response: Response,
+    db: Session = Depends(get_db)
 ):
     """
     Update the seat count for a showtime in the database.
@@ -261,7 +272,7 @@ def update_seat_count(
     screen_service = ScreenDataService()
     showtime_id_int = int(str(showtime_id).replace('-', '')[:8], 16) % (10**9)
     
-    db_item = db_service.get_showtime_by_id(showtime_id_int)
+    db_item = db_service.get_showtime_by_id(db, showtime_id_int)
     if not db_item:
         raise HTTPException(status_code=404, detail="Showtime not found")
     
@@ -269,7 +280,7 @@ def update_seat_count(
     
     # Get screen to validate seat count
     screen_id_int = int(str(showtime.screen_id).replace('-', '')[:8], 16) % (10**9)
-    screen_data = screen_service.get_screen_by_id(screen_id_int)
+    screen_data = screen_service.get_screen_by_id(db, screen_id_int)
     if not screen_data:
         raise HTTPException(status_code=404, detail="Screen not found for this showtime")
     
@@ -289,7 +300,7 @@ def update_seat_count(
         )
     
     # Update seat count in database
-    updated_item = db_service.update_seat_count(showtime_id_int, seat_update.count)
+    updated_item = db_service.update_seat_count(db, showtime_id_int, seat_update.count)
     if not updated_item:
         raise HTTPException(status_code=500, detail="Failed to update seat count")
     
