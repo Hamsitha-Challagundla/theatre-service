@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 from typing import Optional
-from uuid import UUID, uuid4
 from datetime import datetime
 from pydantic import BaseModel, Field
 
 
 class ScreenBase(BaseModel):
-    theatre_id: UUID = Field(
+    theatre_id: int = Field(
         ...,
         description="ID of the theatre this screen belongs to.",
-        json_schema_extra={"example": "99999999-9999-4999-8999-999999999999"},
+        json_schema_extra={"example": 101},
     )
     screen_number: int = Field(
         ...,
@@ -48,7 +47,7 @@ class ScreenCreate(ScreenBase):
         "json_schema_extra": {
             "examples": [
                 {
-                    "theatre_id": "99999999-9999-4999-8999-999999999999",
+                    "theatre_id": 101,
                     "screen_number": 2,
                     "num_rows": 10, 
                     "num_cols": 25,
@@ -60,7 +59,7 @@ class ScreenCreate(ScreenBase):
 
 class ScreenUpdate(BaseModel):
     """Partial update for a Screen; supply only fields to change."""
-    theatre_id: Optional[UUID] = Field(None, description="ID of the theatre this screen belongs to")    
+    theatre_id: Optional[int] = Field(None, description="ID of the theatre this screen belongs to")    
     screen_number: Optional[int] = Field(None, description="Screen number")
     num_rows: Optional[int] = Field(None, description="Number of seating rows")
     num_cols: Optional[int] = Field(None, description="Number of seating columns")
@@ -77,10 +76,10 @@ class ScreenUpdate(BaseModel):
 
 class ScreenRead(ScreenBase):
     """Server representation returned to clients."""
-    screen_id: UUID = Field(
-        default_factory=uuid4,
+    screen_id: int = Field(
+        ...,
         description="Server-generated Screen ID.",
-        json_schema_extra={"example": "88888888-8888-4888-8888-888888888888"},
+        json_schema_extra={"example": 202},
     )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -97,8 +96,8 @@ class ScreenRead(ScreenBase):
         "json_schema_extra": {
             "examples": [
                 {
-                    "screen_id": "88888888-8888-4888-8888-888888888888",
-                    "theatre_id": "99999999-9999-4999-8999-999999999999",
+                    "screen_id": "1",
+                    "theatre_id": "1",
                     "screen_number": 1,
                     "num_rows": 15,
                     "num_cols": 20,

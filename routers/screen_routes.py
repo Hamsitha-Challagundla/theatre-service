@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
+# IDs are integers now; no UUID import required
 
 from fastapi import APIRouter, HTTPException, Header, Query, Depends
 from fastapi.responses import Response
@@ -23,7 +23,7 @@ def create_screen(screen: ScreenCreate, response: Response, db: Session = Depend
     """Create a new screen in the database."""
     db_service = ScreenDataService()
     
-    screen_id = db_service.create_screen(
+    screen_obj = db_service.create_screen(
         db=db,
         theatre_id=1,  # Placeholder - would map UUID to int
         screen_number=screen.screen_number,
@@ -32,18 +32,18 @@ def create_screen(screen: ScreenCreate, response: Response, db: Session = Depend
         created_by=1  # Placeholder - would come from auth
     )
     
-    db_item = db_service.get_screen_by_id(screen_id)
-    if not db_item:
-        raise HTTPException(status_code=500, detail="Failed to create screen")
+    # db_item = db_service.get_screen_by_id(screen_id)
+    # if not db_item:
+    #     raise HTTPException(status_code=500, detail="Failed to create screen")
     
-    new_screen = ScreenRead(**dict_to_screen_read(db_item))
+    new_screen = ScreenRead(**dict_to_screen_read(screen_obj))
     response.headers["ETag"] = calc_etag(new_screen)
     return new_screen
 
 
 @router.get("", response_model=List[ScreenRead])
 def list_screens(
-    theatre_id: Optional[UUID] = Query(None, description="Filter by theatre ID"),
+    theatre_id: Optional[int] = Query(None, description="Filter by theatre ID"),
     screen_number: Optional[int] = Query(None, description="Filter by screen number"),
     db: Session = Depends(get_db),
 ):
@@ -58,24 +58,22 @@ def list_screens(
     
     if theatre_id:
         items = [s for s in items if s.theatre_id == theatre_id]
-    if screen_number is not None:
-        items = [s for s in items if s.screen_number == str(screen_number)]
+    if screen_number is not None:  # This line remains unchanged
+        items = [s for s in items if s.screen_number == screen_number]
     
     return items
 
 
 @router.get("/{screen_id}", response_model=ScreenRead)
 def get_screen(
-    screen_id: UUID,
+    screen_id: int,
     response: Response,
     if_none_match: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Get a specific screen from the database by ID."""
     db_service = ScreenDataService()
-    screen_id_int = int(str(screen_id).replace('-', '')[:8], 16) % (10**9)
-    
-    db_item = db_service.get_screen_by_id(db, screen_id_int)
+    db_item = db_service.get_screen_by_id(db, screen_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Screen not found")
     
@@ -91,7 +89,7 @@ def get_screen(
 
 @router.patch("/{screen_id}", response_model=ScreenRead)
 def update_screen(
-    screen_id: UUID,
+    screen_id: int,
     update: ScreenUpdate,
     response: Response,
     if_match: Optional[str] = Header(None),
@@ -99,9 +97,7 @@ def update_screen(
 ):
     """Update a screen (partial update) in the database."""
     db_service = ScreenDataService()
-    screen_id_int = int(str(screen_id).replace('-', '')[:8], 16) % (10**9)
-    
-    db_item = db_service.get_screen_by_id(db, screen_id_int)
+    db_item = db_service.get_screen_by_id(db, screen_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Screen not found")
     
@@ -116,7 +112,7 @@ def update_screen(
     updates = update.model_dump(exclude_none=True)
     success = db_service.update_screen(
         db=db,
-        screen_id=screen_id_int,
+        screen_id=screen_id,
         screen_number=updates.get('screen_number'),
         num_rows=updates.get('num_rows'),
         num_cols=updates.get('num_cols')
@@ -125,7 +121,7 @@ def update_screen(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update screen")
     
-    db_item = db_service.get_screen_by_id(screen_id_int)
+    db_item = db_service.get_screen_by_id(db, screen_id)
     updated = ScreenRead(**dict_to_screen_read(db_item))
     
     new_etag = calc_etag(updated)
@@ -135,7 +131,7 @@ def update_screen(
 
 @router.put("/{screen_id}", response_model=ScreenRead)
 def replace_screen(
-    screen_id: UUID,
+    screen_id: int,
     screen: ScreenCreate,
     response: Response,
     if_match: Optional[str] = Header(None),
@@ -143,9 +139,7 @@ def replace_screen(
 ):
     """Replace entire screen resource (PUT) in the database."""
     db_service = ScreenDataService()
-    screen_id_int = int(str(screen_id).replace('-', '')[:8], 16) % (10**9)
-    
-    db_item = db_service.get_screen_by_id(db, screen_id_int)
+    db_item = db_service.get_screen_by_id(db, screen_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Screen not found")
     
@@ -159,7 +153,7 @@ def replace_screen(
     
     success = db_service.update_screen(
         db=db,
-        screen_id=screen_id_int,
+        screen_id=screen_id,
         screen_number=screen.screen_number,
         num_rows=screen.num_rows,
         num_cols=screen.num_cols
@@ -168,7 +162,7 @@ def replace_screen(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to replace screen")
     
-    db_item = db_service.get_screen_by_id(screen_id_int)
+    db_item = db_service.get_screen_by_id(db, screen_id)
     replacement = ScreenRead(**dict_to_screen_read(db_item))
     
     new_etag = calc_etag(replacement)
@@ -178,15 +172,13 @@ def replace_screen(
 
 @router.delete("/{screen_id}")
 def delete_screen(
-    screen_id: UUID,
+    screen_id: int,
     if_match: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Soft delete a screen from the database."""
     db_service = ScreenDataService()
-    screen_id_int = int(str(screen_id).replace('-', '')[:8], 16) % (10**9)
-    
-    db_item = db_service.get_screen_by_id(db, screen_id_int)
+    db_item = db_service.get_screen_by_id(db, screen_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Screen not found")
     
@@ -196,8 +188,8 @@ def delete_screen(
     if if_match is not None and if_match != current_etag:
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
     
-    success = db_service.delete_screen(db, screen_id_int)
+    success = db_service.delete_screen(db, screen_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete screen")
     
-    return {"status": "deleted", "id": str(screen_id)}
+    return {"status": "deleted", "id": screen_id}

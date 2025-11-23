@@ -9,10 +9,32 @@ from datetime import datetime
 from config import Config
 
 # Create engine
+# engine = create_engine(
+#     Config.SQLALCHEMY_DATABASE_URI,
+#     **Config.SQLALCHEMY_ENGINE_OPTIONS,
+#     echo=Config.SQLALCHEMY_ECHO
+# )
+
+# --- CONFIGURATION START ---
+DB_USER = "root"
+DB_PASSWORD = ""     
+DB_HOST = "34.9.21.229"          
+DB_PORT = "3306"
+DB_NAME = "theatres"         
+
+# Connection String Format: dialect+driver://username:password@host:port/database
+DATABASE_URI = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# --- CONFIGURATION END ---
+
+# Create engine
 engine = create_engine(
-    Config.SQLALCHEMY_DATABASE_URI,
-    **Config.SQLALCHEMY_ENGINE_OPTIONS,
-    echo=Config.SQLALCHEMY_ECHO
+    DATABASE_URI,
+    # 'pool_pre_ping' is crucial for Cloud SQL to handle dropped connections automatically
+    pool_pre_ping=True, 
+    # Recycles connections before the cloud firewall cuts them off
+    pool_recycle=1800, 
+    # Set to True to see raw SQL queries in your terminal (great for debugging)
+    echo=True  
 )
 
 # Create session factory

@@ -1,5 +1,4 @@
 from typing import Optional, List
-from uuid import UUID, uuid4
 from datetime import datetime
 from pydantic import BaseModel, Field
 class CinemaBase(BaseModel):
@@ -42,10 +41,10 @@ class CinemaUpdate(BaseModel):
     }
 class CinemaRead(CinemaBase):
     """Server representation returned to clients."""
-    cinema_id: UUID = Field(
-        default_factory=uuid4,
+    cinema_id: int = Field(
+        ...,
         description="Server-generated Cinema ID.",
-        json_schema_extra={"example": "77777777-7777-4777-8777-777777777777"},
+        json_schema_extra={"example": 301},
     )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -62,7 +61,7 @@ class CinemaRead(CinemaBase):
         "json_schema_extra": {
             "examples": [
                 {
-                    "cinema_id": "77777777-7777-4777-8777-777777777777",
+                    "cinema_id": "1",
                     "name": "Cineplex 20",
                     "created_at": "2025-01-15T10:20:30Z",
                     "updated_at": "2025-01-16T12:00:00Z",

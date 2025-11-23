@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 from typing import Optional
-from uuid import UUID, uuid4
 from datetime import datetime
 from pydantic import BaseModel, Field
 
 
 class ShowtimeBase(BaseModel):
-    screen_id: UUID = Field(
+    screen_id: int = Field(
         ...,
         description="ID of the screen where the movie is shown.",
-        json_schema_extra={"example": "88888888-8888-4888-8888-888888888888"},
+        json_schema_extra={"example": 202},
     )
     movie_id: int = Field(
         ...,
@@ -32,7 +31,7 @@ class ShowtimeBase(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "screen_id": "88888888-8888-4888-8888-888888888888",
+                    "screen_id": "1",
                     "movie_id": 1001,
                     "start_time": "2025-01-20T18:30:00Z",
                     "seats_booked": 0,
@@ -48,7 +47,7 @@ class ShowtimeCreate(ShowtimeBase):
         "json_schema_extra": {
             "examples": [
                 {
-                    "screen_id": "88888888-8888-4888-8888-888888888888",
+                    "screen_id": 202,
                     "movie_id": 1001,
                     "start_time": "2025-01-20T18:30:00Z",
                 }
@@ -59,7 +58,7 @@ class ShowtimeCreate(ShowtimeBase):
 
 class ShowtimeUpdate(BaseModel):
     """Partial update for a Showtime; supply only fields to change."""
-    screen_id: Optional[UUID] = Field(None, description="ID of the screen")
+    screen_id: Optional[int] = Field(None, description="ID of the screen")
     movie_id: Optional[int] = Field(None, description="ID of the movie")
     start_time: Optional[datetime] = Field(None, description="Start time")
     seats_booked: Optional[int] = Field(None, description="Number of seats booked")
@@ -76,10 +75,10 @@ class ShowtimeUpdate(BaseModel):
 
 class ShowtimeRead(ShowtimeBase):
     """Server representation returned to clients."""
-    showtime_id: UUID = Field(
-        default_factory=uuid4,
+    showtime_id: int = Field(
+        ...,
         description="Server-generated Showtime ID.",
-        json_schema_extra={"example": "77777777-7777-4777-8777-777777777777"},
+        json_schema_extra={"example": 401},
     )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -96,8 +95,8 @@ class ShowtimeRead(ShowtimeBase):
         "json_schema_extra": {
             "examples": [
                 {
-                    "showtime_id": "77777777-7777-4777-8777-777777777777",
-                    "screen_id": "88888888-8888-4888-8888-888888888888",
+                    "showtime_id": "1",
+                    "screen_id": "1",
                     "movie_id": 1001,
                     "start_time": "2025-01-20T18:30:00Z",
                     "seats_booked": 15,
@@ -129,8 +128,8 @@ class SeatUpdateRequest(BaseModel):
 
 class SeatAvailabilityResponse(BaseModel):
     """Response for seat availability check."""
-    showtime_id: UUID = Field(..., description="ID of the showtime")
-    screen_id: UUID = Field(..., description="ID of the screen")
+    showtime_id: int = Field(..., description="ID of the showtime")
+    screen_id: int = Field(..., description="ID of the screen")
     total_seats: int = Field(..., description="Total number of seats in the screen")
     seats_booked: int = Field(..., description="Number of seats currently booked")
     seats_available: int = Field(..., description="Number of seats available")
@@ -139,8 +138,8 @@ class SeatAvailabilityResponse(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "showtime_id": "77777777-7777-4777-8777-777777777777",
-                    "screen_id": "88888888-8888-4888-8888-888888888888",
+                    "showtime_id": "1",
+                    "screen_id": "1",
                     "total_seats": 300,
                     "seats_booked": 15,
                     "seats_available": 285,

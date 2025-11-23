@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Header, Query, Depends
 from fastapi.responses import Response
@@ -12,7 +11,7 @@ from schemas.theatre import TheatreCreate, TheatreRead, TheatreUpdate
 from services.theatreDataService import TheatreDataService
 from database import get_db
 from utils.etag import calc_etag
-from utils.converters import dict_to_theatre_read, db_to_uuid
+from utils.converters import dict_to_theatre_read
 
 
 router = APIRouter(prefix="/theatres", tags=["theatres"])
@@ -43,7 +42,7 @@ def create_theatre(
 @router.get("", response_model=List[TheatreRead])
 def list_theatres(
     name: Optional[str] = Query(None, description="Filter by theatre name"),
-    cinema_id: Optional[UUID] = Query(None, description="Filter by cinema_id"),
+    cinema_id: Optional[int] = Query(None, description="Filter by cinema_id"),
     db: Session = Depends(get_db)
 ):
     """List theatres from the database. Supports filtering by name and cinema_id."""
@@ -65,15 +64,13 @@ def list_theatres(
 
 @router.get("/{theatre_id}", response_model=TheatreRead)
 def get_theatre(
-    theatre_id: UUID,
+    theatre_id: int,
     response: Response,
     if_none_match: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Get a specific theatre from the database by ID."""
-    theatre_id_int = int(str(theatre_id).replace('-', '')[:8], 16) % (10**9)
-    
-    theatre = service.get_theatre_by_id(db, theatre_id_int)
+    theatre = service.get_theatre_by_id(db, theatre_id)
     if not theatre:
         raise HTTPException(status_code=404, detail="Theatre not found")
     
@@ -89,16 +86,14 @@ def get_theatre(
 
 @router.patch("/{theatre_id}", response_model=TheatreRead)
 def update_theatre(
-    theatre_id: UUID,
+    theatre_id: int,
     update: TheatreUpdate,
     response: Response,
     if_match: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Update a theatre (partial update) in the database."""
-    theatre_id_int = int(str(theatre_id).replace('-', '')[:8], 16) % (10**9)
-    
-    theatre = service.get_theatre_by_id(db, theatre_id_int)
+    theatre = service.get_theatre_by_id(db, theatre_id)
     if not theatre:
         raise HTTPException(status_code=404, detail="Theatre not found")
     
@@ -113,7 +108,7 @@ def update_theatre(
     updates = update.model_dump(exclude_none=True)
     updated_theatre = service.update_theatre(
         db=db,
-        theatre_id=theatre_id_int,
+        theatre_id=theatre_id,
         name=updates.get('name'),
         address=updates.get('address'),
         screen_count=updates.get('screenCount')
@@ -130,16 +125,14 @@ def update_theatre(
 
 @router.put("/{theatre_id}", response_model=TheatreRead)
 def replace_theatre(
-    theatre_id: UUID,
+    theatre_id: int,
     theatre: TheatreCreate,
     response: Response,
     if_match: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Replace entire theatre resource (PUT) in the database."""
-    theatre_id_int = int(str(theatre_id).replace('-', '')[:8], 16) % (10**9)
-    
-    existing_theatre = service.get_theatre_by_id(db, theatre_id_int)
+    existing_theatre = service.get_theatre_by_id(db, theatre_id)
     if not existing_theatre:
         raise HTTPException(status_code=404, detail="Theatre not found")
     
@@ -153,7 +146,7 @@ def replace_theatre(
     
     updated_theatre = service.update_theatre(
         db=db,
-        theatre_id=theatre_id_int,
+        theatre_id=theatre_id,
         name=theatre.name,
         address=theatre.address,
         screen_count=theatre.screenCount
@@ -170,14 +163,12 @@ def replace_theatre(
 
 @router.delete("/{theatre_id}")
 def delete_theatre(
-    theatre_id: UUID,
+    theatre_id: int,
     if_match: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Soft delete a theatre from the database."""
-    theatre_id_int = int(str(theatre_id).replace('-', '')[:8], 16) % (10**9)
-    
-    theatre = service.get_theatre_by_id(db, theatre_id_int)
+    theatre = service.get_theatre_by_id(db, theatre_id)
     if not theatre:
         raise HTTPException(status_code=404, detail="Theatre not found")
     
@@ -187,8 +178,8 @@ def delete_theatre(
     if if_match is not None and if_match != current_etag:
         raise HTTPException(status_code=412, detail="Precondition Failed: ETag mismatch")
     
-    success = service.delete_theatre(db, theatre_id_int)
+    success = service.delete_theatre(db, theatre_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete theatre")
     
-    return {"status": "deleted", "id": str(theatre_id)}
+    return {"status": "deleted", "id": theatre_id}
