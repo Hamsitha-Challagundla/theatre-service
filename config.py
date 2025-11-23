@@ -32,7 +32,7 @@ class Config:
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
     # External services
-    MOVIE_SERVICE_URL = os.getenv('MOVIE_SERVICE_URL', 'http://localhost:5001')
+    MOVIE_SERVICE_URL = os.getenv('MOVIE_SERVICE_URL', 'http://localhost:8050')
     BOOKING_SERVICE_URL = os.getenv('BOOKING_SERVICE_URL', 'http://localhost:5002')
     USER_SERVICE_URL = os.getenv('USER_SERVICE_URL', 'http://localhost:5004')
 

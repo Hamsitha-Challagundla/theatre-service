@@ -21,6 +21,11 @@ class ShowtimeBase(BaseModel):
         description="Start time of the showtime.",
         json_schema_extra={"example": "2025-01-20T18:30:00Z"},
     )
+    price: float = Field(
+        ...,
+        description="Ticket price for the showtime (float, required).",
+        json_schema_extra={"example": 12.50},
+    )
     seats_booked: int = Field(
         default=0,
         description="Number of seats currently booked for this showtime.",
@@ -34,6 +39,7 @@ class ShowtimeBase(BaseModel):
                     "screen_id": "1",
                     "movie_id": 1001,
                     "start_time": "2025-01-20T18:30:00Z",
+                    "price": 12.5,
                     "seats_booked": 0,
                 }
             ]
@@ -50,6 +56,7 @@ class ShowtimeCreate(ShowtimeBase):
                     "screen_id": 202,
                     "movie_id": 1001,
                     "start_time": "2025-01-20T18:30:00Z",
+                    "price": 12.5,
                 }
             ]
         }
@@ -61,6 +68,7 @@ class ShowtimeUpdate(BaseModel):
     screen_id: Optional[int] = Field(None, description="ID of the screen")
     movie_id: Optional[int] = Field(None, description="ID of the movie")
     start_time: Optional[datetime] = Field(None, description="Start time")
+    price: Optional[float] = Field(None, description="Ticket price")
     seats_booked: Optional[int] = Field(None, description="Number of seats booked")
 
     model_config = {
@@ -99,6 +107,7 @@ class ShowtimeRead(ShowtimeBase):
                     "screen_id": "1",
                     "movie_id": 1001,
                     "start_time": "2025-01-20T18:30:00Z",
+                    "price": 12.5,
                     "seats_booked": 15,
                     "created_at": "2025-01-15T10:20:30Z",
                     "updated_at": "2025-01-16T12:00:00Z",

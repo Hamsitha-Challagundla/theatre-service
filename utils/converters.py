@@ -79,6 +79,7 @@ def dict_to_showtime_read(db_item: Any) -> Dict[str, Any]:
         "showtime_id": db_item.showtime_id,
         "screen_id": db_item.screen_id,
         "movie_id": db_item.movie_id,
+        "price": db_item.price,
         "start_time": db_item.start_time,
         "seats_booked": db_item.seats_booked,
         "created_at": db_item.created_at,

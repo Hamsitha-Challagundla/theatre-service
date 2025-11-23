@@ -51,6 +51,7 @@ class ShowtimeDataService:
         movie_id: int,
         start_time: datetime,
         seats_booked: int,
+        price: float,
         created_by: int
     ) -> Showtime:
         """Create a new showtime."""
@@ -58,6 +59,7 @@ class ShowtimeDataService:
             screen_id=screen_id,
             movie_id=movie_id,
             start_time=start_time,
+            price=price,
             seats_booked=seats_booked,
             created_by=created_by
         )
@@ -72,7 +74,8 @@ class ShowtimeDataService:
         showtime_id: int,
         movie_id: Optional[int] = None,
         start_time: Optional[datetime] = None,
-        seats_booked: Optional[int] = None
+        seats_booked: Optional[int] = None,
+        price: Optional[float] = None
     ) -> Optional[Showtime]:
         """Update an existing showtime."""
         showtime = self.get_showtime_by_id(db, showtime_id)
@@ -85,6 +88,8 @@ class ShowtimeDataService:
             showtime.start_time = start_time
         if seats_booked is not None:
             showtime.seats_booked = seats_booked
+        if price is not None:
+            showtime.price = price
 
         db.commit()
         db.refresh(showtime)

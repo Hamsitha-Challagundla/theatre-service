@@ -27,7 +27,7 @@ def create_theatre(
     """Create a new theatre in the database."""
     new_theatre = service.create_theatre(
         db=db,
-        cinema_id=1,  # Placeholder - would map UUID to int
+        cinema_id=theatre.cinema_id,  
         name=theatre.name,
         address=theatre.address,
         screen_count=theatre.screenCount,

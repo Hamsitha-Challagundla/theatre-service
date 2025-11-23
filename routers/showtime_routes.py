@@ -5,6 +5,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from fastapi.responses import Response
+import requests
+
+from config import Config
 
 from schemas.showtime import (
     ShowtimeCreate,
@@ -36,18 +39,44 @@ def create_showtime(showtime: ShowtimeCreate, response: Response, db: Session = 
     if not screen:
         raise HTTPException(status_code=404, detail=f"Screen {screen_id_int} not found")
     
-    showtime_id = db_service.create_showtime(
+    # Verify movie exists by calling Movie Service
+    movie_service_url = Config.MOVIE_SERVICE_URL.rstrip("/")
+    movie_check_url = f"{movie_service_url}/movies/{showtime.movie_id}"
+    try:
+        mv_resp = requests.get(movie_check_url, timeout=5)
+    except requests.RequestException as exc:
+        # Upstream service unavailable or network error
+        raise HTTPException(status_code=502, detail=f"Movie service unavailable: {exc}")
+
+    if mv_resp.status_code == 404:
+        # Forward the upstream 404 body if possible
+        try:
+            payload = mv_resp.json()
+        except Exception:
+            payload = {"detail": f"Movie {showtime.movie_id} not found"}
+        raise HTTPException(status_code=404, detail=payload)
+    elif mv_resp.status_code >= 400:
+        # For other client/server errors from movie service, propagate a 502
+        try:
+            payload = mv_resp.json()
+        except Exception:
+            payload = {"detail": f"Upstream error: {mv_resp.status_code}"}
+        raise HTTPException(status_code=502, detail=payload)
+
+    # All checks passed; create showtime
+    db_item = db_service.create_showtime(
         db=db,
         screen_id=screen_id_int,
         movie_id=showtime.movie_id,
         start_time=showtime.start_time,
         seats_booked=showtime.seats_booked,
-        created_by=1  # Placeholder - would come from auth
+        price=showtime.price,
+        created_by=1,  # Placeholder - would come from auth
     )
     
-    db_item = db_service.get_showtime_by_id(showtime_id)
-    if not db_item:
-        raise HTTPException(status_code=500, detail="Failed to create showtime")
+    # db_item = db_service.get_showtime_by_id(showtime_id)
+    # if not db_item:
+    #     raise HTTPException(status_code=500, detail="Failed to create showtime")
     
     new_showtime = ShowtimeRead(**dict_to_showtime_read(db_item))
     response.headers["ETag"] = calc_etag(new_showtime)
@@ -82,7 +111,6 @@ def list_showtimes(
         items = [s for s in items if s.start_time >= start_time_after]
     
     return items
-
 
 @router.get("/{showtime_id}", response_model=ShowtimeRead)
 def get_showtime(
@@ -139,7 +167,8 @@ def update_showtime(
         showtime_id=showtime_id,
         movie_id=updates.get('movie_id'),
         start_time=updates.get('start_time'),
-        seats_booked=updates.get('seats_booked')
+        seats_booked=updates.get('seats_booked'),
+        price=updates.get('price')
     )
     
     if not success:
@@ -182,7 +211,8 @@ def replace_showtime(
         showtime_id=showtime_id,
         movie_id=showtime.movie_id,
         start_time=showtime.start_time,
-        seats_booked=showtime.seats_booked
+        seats_booked=showtime.seats_booked,
+        price=showtime.price
     )
     
     if not success:

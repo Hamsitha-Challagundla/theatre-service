@@ -2,7 +2,7 @@
 SQLAlchemy ORM models for Theatre Service
 """
 
-from sqlalchemy import Column, Integer, String, SmallInteger, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, SmallInteger, ForeignKey, DateTime, Float
 from sqlalchemy.orm import relationship
 from database import Base, BaseModel
 
@@ -56,6 +56,7 @@ class Showtime(Base, BaseModel):
     screen_id = Column(Integer, ForeignKey('screens.screen_id'), nullable=False)
     movie_id = Column(Integer, nullable=False)
     start_time = Column(DateTime, nullable=False)
+    price = Column(Float, nullable=False)
     seats_booked = Column(SmallInteger, nullable=False, default=0)
 
     # Relationships
