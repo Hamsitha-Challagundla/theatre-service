@@ -3,6 +3,8 @@ Configuration for Theatre Service with Google Cloud SQL
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class Config:
