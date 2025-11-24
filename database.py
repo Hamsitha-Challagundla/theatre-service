@@ -16,11 +16,13 @@ from config import Config
 # )
 
 # --- CONFIGURATION START ---
-DB_USER = "root"
-DB_PASSWORD = ""     
-DB_HOST = "34.9.21.229"          
-DB_PORT = "3306"
-DB_NAME = "theatres"         
+import os
+
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")     
+DB_HOST = os.getenv("DB_HOST", "34.9.21.229")          
+DB_PORT = os.getenv("DB_PORT", "3306")
+DB_NAME = os.getenv("DB_NAME", "theatres")         
 
 # Connection String Format: dialect+driver://username:password@host:port/database
 DATABASE_URI = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
