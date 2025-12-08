@@ -16,11 +16,11 @@ from fastapi import Query, Path
 from typing import Optional
 from fastapi.responses import Response
 
-from models.theatre import TheatreCreate, TheatreRead, TheatreUpdate
-from models.screen import ScreenCreate, ScreenRead, ScreenUpdate
-from models.cinema import CinemaCreate, CinemaRead, CinemaUpdate
-from models.health import Health
-from models.theatreDataService import TheatreDataService
+from schemas.theatre import TheatreCreate, TheatreRead, TheatreUpdate
+from schemas.screen import ScreenCreate, ScreenRead, ScreenUpdate
+from schemas.cinema import CinemaCreate, CinemaRead, CinemaUpdate
+from schemas.health import Health
+from services.theatreDataService import TheatreDataService
 
 port = int(os.environ.get("FASTAPIPORT", 5002))
 
