@@ -1,13 +1,13 @@
 name: Python CI
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  push:
+    branches-ignore: [ "main" ]   # prevent direct pushes to main from running CI
 
 jobs:
-  build:
+  quality-checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +22,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install flake8 pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Lint (unused imports + basic checks)
+        run: |
+          flake8 . \
+            --select=F401,F841,E9,F63,F7,F82 \
+            --show-source \
+            --statistics
 
       - name: Run tests
         run: |
