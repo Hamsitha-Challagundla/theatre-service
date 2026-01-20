@@ -27,4 +27,5 @@ jobs:
 
       - name: Run tests
         run: |
-          if [ -d tests ]; then pytest; else echo "No tests found"; fi
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          pytest
